@@ -10,10 +10,10 @@ public class XaerosConfig {
     public boolean radar = true;
 
     private boolean getOverride(String nodeSuffix, boolean def, MinimapPlayer player) {
-        if (player.hasPermission("minimap.override."+nodeSuffix+".enabled")) {
-            return true;
-        } else if (player.hasPermission("minimap.override."+nodeSuffix+".disabled")) {
+        if (player.hasExplicitPermission("minimap.override."+nodeSuffix+".disabled")) {
             return false;
+        } else if (player.hasExplicitPermission("minimap.override."+nodeSuffix+".enabled")) {
+            return true;
         }
 
         return def;

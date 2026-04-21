@@ -4,12 +4,10 @@ import com.funniray.minimap.common.api.MinimapLocation;
 import com.funniray.minimap.common.api.MinimapPlayer;
 import com.funniray.minimap.common.version.Version;
 import com.funniray.minimap.spigot.SpigotMinimap;
-import net.kyori.adventure.platform.bukkit.MinecraftComponentSerializer;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.List;
 import java.util.UUID;
 
 public class SpigotPlayer implements MinimapPlayer {
@@ -21,7 +19,18 @@ public class SpigotPlayer implements MinimapPlayer {
 
     @Override
     public void sendPluginMessage(byte[] message, String channel) {
-        Bukkit.getGlobalRegionScheduler().run(SpigotMinimap.getInstance(), v->nativePlayer.sendPluginMessage(SpigotMinimap.getInstance(), channel, message));
+        sendPluginMessages(List.of(new PluginMessage(channel, message)));
+    }
+
+    @Override
+    public void sendPluginMessages(List<PluginMessage> messages) {
+        nativePlayer.getScheduler().run(SpigotMinimap.getInstance(), task -> {
+            if (nativePlayer.isOnline()) {
+                for (PluginMessage message : messages) {
+                    nativePlayer.sendPluginMessage(SpigotMinimap.getInstance(), message.channel(), message.payload());
+                }
+            }
+        }, null);
     }
 
     @Override
@@ -57,6 +66,11 @@ public class SpigotPlayer implements MinimapPlayer {
     @Override
     public boolean hasPermission(String string) {
         return nativePlayer.hasPermission(string);
+    }
+
+    @Override
+    public boolean hasExplicitPermission(String string) {
+        return nativePlayer.isPermissionSet(string) && nativePlayer.hasPermission(string);
     }
 
     @Override

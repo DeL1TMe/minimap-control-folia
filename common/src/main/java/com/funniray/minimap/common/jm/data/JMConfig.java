@@ -1,10 +1,15 @@
 package com.funniray.minimap.common.jm.data;
 
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
+import org.spongepowered.configurate.objectmapping.meta.Comment;
 
 @ConfigSerializable
 public class JMConfig {
     public String journeymapEnabled = "true";
+    @Comment("JourneyMap 6 client permission: enables the in-game minimap when JourneyMap itself is allowed.")
+    public String minimapEnabled = "true";
+    @Comment("JourneyMap 6 client permission: hides JourneyMap coordinate display where supported.")
+    public String hideCoordinates = "false";
     public String useWorldId = "true";
     public String viewOnlyServerProperties = "true";
     public String allowMultiplayerSettings = "ALL";
@@ -45,6 +50,8 @@ public class JMConfig {
         JMConfig clone = new JMConfig();
 
         clone.journeymapEnabled = this.journeymapEnabled;
+        clone.minimapEnabled = this.minimapEnabled;
+        clone.hideCoordinates = this.hideCoordinates;
         clone.useWorldId = this.useWorldId;
         clone.viewOnlyServerProperties = this.viewOnlyServerProperties;
         clone.allowMultiplayerSettings = this.allowMultiplayerSettings;
@@ -79,7 +86,35 @@ public class JMConfig {
         clone.villagerRadarEnabled = this.villagerRadarEnabled;
         clone.animalRadarEnabled = this.animalRadarEnabled;
         clone.mobRadarEnabled = this.mobRadarEnabled;
+        clone.configVersion = this.configVersion;
 
         return clone;
+    }
+
+    public JMConfig normalizeForClient() {
+        JMConfig normalized = this.copy();
+        if (Boolean.parseBoolean(normalized.journeymapEnabled)) {
+            return normalized;
+        }
+
+        normalized.minimapEnabled = "false";
+        normalized.allowMultiplayerSettings = "NONE";
+        normalized.worldPlayerRadar = "NONE";
+        normalized.allowDeathPoints = "false";
+        normalized.showInGameBeacons = "false";
+        normalized.allowWaypoints = "false";
+        normalized.allowRightClickTeleport = "false";
+        normalized.teleportEnabled = "false";
+        normalized.surfaceMapping = "NONE";
+        normalized.topoMapping = "NONE";
+        normalized.biomeMapping = "NONE";
+        normalized.caveMapping = "NONE";
+        normalized.radarEnabled = "NONE";
+        normalized.playerRadarEnabled = "false";
+        normalized.playerRadarNamesEnabled = "false";
+        normalized.villagerRadarEnabled = "false";
+        normalized.animalRadarEnabled = "false";
+        normalized.mobRadarEnabled = "false";
+        return normalized;
     }
 }

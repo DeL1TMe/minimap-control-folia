@@ -57,7 +57,7 @@ public class NetworkUtils {
             byte[] out = new byte[j];
             in.readFully(out, 0, j);
 
-            String s = new String(out);
+            String s = new String(out, StandardCharsets.UTF_8);
 
             if (s.length() > MAX_STRING_LENGTH) {
                 throw new RuntimeException("The received string length is longer than maximum allowed (" + j + " > " + MAX_STRING_LENGTH + ")");

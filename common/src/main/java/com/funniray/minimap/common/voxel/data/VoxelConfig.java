@@ -12,10 +12,10 @@ public class VoxelConfig {
     public String teleportCommand = "tp %p %x %y %z";
 
     private boolean getOverride(String nodeSuffix, boolean def, MinimapPlayer player) {
-        if (player.hasPermission("minimap.override."+nodeSuffix+".enabled")) {
-            return true;
-        } else if (player.hasPermission("minimap.override."+nodeSuffix+".disabled")) {
+        if (player.hasExplicitPermission("minimap.override."+nodeSuffix+".disabled")) {
             return false;
+        } else if (player.hasExplicitPermission("minimap.override."+nodeSuffix+".enabled")) {
+            return true;
         }
 
         return def;
@@ -27,6 +27,7 @@ public class VoxelConfig {
         newConfig.radarMobsAllowed = getOverride("radar-mobs", this.radarMobsAllowed, player);
         newConfig.radarPlayersAllowed = getOverride("radar-players", this.radarPlayersAllowed, player);
         newConfig.cavesAllowed = getOverride("cave-mode", this.cavesAllowed, player);
+        newConfig.teleportCommand = this.teleportCommand;
 
         return newConfig;
     }

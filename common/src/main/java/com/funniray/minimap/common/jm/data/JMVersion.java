@@ -16,7 +16,7 @@ public class JMVersion {
         public final String patch;
 
         public VersionDetails() {
-            this(6,1,0,"-beta99");
+            this(6,0,0,"-beta.67");
         }
 
         public VersionDetails(int major, int minor, int micro, String patch) {
@@ -24,7 +24,7 @@ public class JMVersion {
             this.minor = minor;
             this.micro = micro;
             this.patch = patch;
-            this.full = String.format("%d.%d.%d%s",major,minor,micro,patch);
+            this.full = String.format("%d.%d.%d%s", major, minor, micro, patch == null ? "" : patch);
         }
     }
 }

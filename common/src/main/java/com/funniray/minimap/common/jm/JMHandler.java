@@ -16,28 +16,55 @@ import com.google.common.io.ByteStreams;
 import com.google.gson.Gson;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
-import java.awt.print.Pageable;
-import java.util.*;
+import java.util.Optional;
 
 public class JMHandler implements MessageHandler {
     private final JavaMinimapPlugin plugin;
-    // JM for 1.21 and above no longer has a leading 0 byte at the start of packets.
-    // We need to note who is on a modern version and not send them (or parse) leading 0 bytes
-    private final Map<UUID, Boolean> modernList = new HashMap<>();
+    private static final byte PACKET_MARKER = 42;
+    private static final String VERSION_CHANNEL = "journeymap:version";
+    private static final String PERMISSIONS_CHANNEL = "journeymap:perm_req";
+    private static final String ADMIN_REQUEST_CHANNEL = "journeymap:admin_req";
+    private static final String ADMIN_SAVE_CHANNEL = "journeymap:admin_save";
+    private static final String TELEPORT_CHANNEL = "journeymap:teleport_req";
+    private static final String MULTIPLAYER_OPTIONS_CHANNEL = "journeymap:mp_options_req";
 
     public JMHandler(JavaMinimapPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public void sendInitialState(MinimapPlayer player) {
+        sendHandshake(player);
+        sendPermissions(player);
+    }
+
+    public void sendHandshake(MinimapPlayer player) {
+        String payload = new Gson().toJson(new JMVersion());
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+        NetworkUtils.writeUtf(payload, out);
+        player.sendPluginMessage(out.toByteArray(), VERSION_CHANNEL);
     }
 
     private Optional<MinimapWorld> getWorldFromKeyedName(String keyedWorld) {
         return JavaMinimapPlugin.getInstance().getServer().getWorlds().stream().filter(w->w.getKeyedName().equals(keyedWorld)).findFirst();
     }
 
-    public void handleMPOptions(MinimapPlayer player, byte[] message, String replyChannel, int replyByte) {
-        player.sendMessage(MiniMessage.miniMessage().deserialize("<red>Multiplayer options are not implemented."));
+    public void sendPermissions(MinimapPlayer player) {
+        handlePerm(player, PERMISSIONS_CHANNEL);
     }
 
-    public void handleTeleport(MinimapPlayer player, byte[] message, String replyChannel, int replyByte) {
+    public void handleMPOptions(MinimapPlayer player, byte[] message) {
+        if (message.length > 0) {
+            player.sendMessage(MiniMessage.miniMessage().deserialize("<red>Saving JourneyMap multiplayer options is not implemented."));
+            return;
+        }
+
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+        out.writeByte(PACKET_MARKER);
+        NetworkUtils.writeUtf(new Gson().toJson(new MultiplayerOptionsConfig()), out);
+        player.sendPluginMessage(out.toByteArray(), MULTIPLAYER_OPTIONS_CHANNEL);
+    }
+
+    public void handleTeleport(MinimapPlayer player, byte[] message) {
         if (!player.hasPermission("minimap.jm.teleport")) {
             player.sendMessage(MiniMessage.miniMessage().deserialize("<red>You don't have permission to teleport."));
             return;
@@ -49,7 +76,6 @@ public class JMHandler implements MessageHandler {
         }
 
         ByteArrayDataInput in = ByteStreams.newDataInput(message);
-        if (!modern(player)) in.readByte();
         double x = in.readDouble();
         double y = in.readDouble();
         double z = in.readDouble();
@@ -65,49 +91,24 @@ public class JMHandler implements MessageHandler {
         player.teleport(world.get().getLocation(x,y,z));
     }
 
-    public void handleAdminReq(MinimapPlayer player, byte[] message, String replyChannel, int replyByte) {
-        ByteArrayDataInput in = ByteStreams.newDataInput(message);
-        if (!modern(player)) in.readByte();
-        in.readByte();
-        ServerPropType type = ServerPropType.getFromType(in.readInt());
-        Gson gson = new Gson();
-        if (type != ServerPropType.GLOBAL) {
+    public void handleAdminReq(MinimapPlayer player, byte[] message) {
+        if (!canViewServerProperties(player)) {
+            player.sendMessage(MiniMessage.miniMessage().deserialize("<red>You don't have permission to view JourneyMap server options."));
             return;
         }
 
-        HashMap<String, String> payloads = new HashMap<>();
-
-        payloads.put("GLOBAL", gson.toJson(plugin.getConfig().globalJourneymapConfig));
-        payloads.put("DEFAULT", gson.toJson(plugin.getConfig().defaultWorldConfig));
-
-        plugin.getServer().getWorlds().stream()
-                .map(MinimapWorld::getName)
-                .forEach(s->payloads.put(s,gson.toJson(plugin.getConfig().getWorldConfig(s))));
-
-        for (Map.Entry<String, String> ent : payloads.entrySet()) {
-            ByteArrayDataOutput out = ByteStreams.newDataOutput();
-            if (!modern(player)) out.writeByte(replyByte);
-            out.writeByte(42);
-            if (ent.getKey().equals("GLOBAL")) {
-                out.writeInt(ServerPropType.GLOBAL.getId());
-                NetworkUtils.writeUtf("", out);
-            } else if (ent.getKey().equals("DEFAULT")) {
-                out.writeInt(ServerPropType.DEFAULT.getId());
-                NetworkUtils.writeUtf("", out);
-            } else {
-                out.writeInt(ServerPropType.DIMENSION.getId());
-                NetworkUtils.writeUtf(ent.getKey(), out);
-            }
-            NetworkUtils.writeUtf(ent.getValue(), out);
-            player.sendPluginMessage(out.toByteArray(), replyChannel);
-        }
+        ByteArrayDataInput in = ByteStreams.newDataInput(message);
+        in.readByte();
+        ServerPropType type = ServerPropType.getFromType(in.readInt());
+        String dimension = NetworkUtils.readUtf(in);
+        NetworkUtils.readUtf(in);
+        sendAdminData(player, type, dimension);
     }
 
-    public void handleAdminSave(MinimapPlayer player, byte[] message, String replyChannel, int replyByte) {
+    public void handleAdminSave(MinimapPlayer player, byte[] message) {
         if (!player.hasPermission("minimap.jm.admin")) return;
 
         ByteArrayDataInput in = ByteStreams.newDataInput(message);
-        if (!modern(player)) in.readByte();
         in.readByte();
         int type = in.readInt();
         String dimension = NetworkUtils.readUtf(in);
@@ -120,35 +121,41 @@ public class JMHandler implements MessageHandler {
         } else if (type == 2 || type == 3) {
             JMWorldConfig newConfig = gson.fromJson(payload, JMWorldConfig.class);
             if (type == 3) {
-                MinimapConfig.WorldConfig worldConfig = plugin.getConfig().getWorldConfig(dimension);
+                MinimapConfig.WorldConfig worldConfig = getWorldConfig(dimension);
                 worldConfig.journeymapConfig = newConfig;
-                System.out.println(dimension);
             } else {
                 plugin.getConfig().defaultWorldConfig = newConfig;
             }
         }
         plugin.saveConfig();
-
-        // Probably not correct, as a 1.16 admin could send an invalid packet
-        // to a newer client that's also online
-        String permChannel = "journeymap:perm_req";
-        int replyInt = 0;
-        if (replyChannel.equals("journeymap:common")) {
-            permChannel = "journeymap:common";
-            replyInt = 2;
-        }
-
-        String finalPermChannel = permChannel;
-        int finalReplyInt = replyInt;
-        plugin.getServer().getPlayers().forEach(p->handlePerm(p, new byte[0], finalPermChannel, finalReplyInt));
+        plugin.getServer().forEachPlayer(this::sendPermissions);
     }
 
-    public void handleVersion(MinimapPlayer player, byte[] message, String replyChannel) {
-        modernList.put(player.getUniqueId(), message.length > 0 && message[0] != 0);
+    private void sendAdminData(MinimapPlayer player, ServerPropType type, String dimension) {
+        Gson gson = new Gson();
+        String payload;
+        if (type == ServerPropType.GLOBAL) {
+            payload = gson.toJson(plugin.getConfig().globalJourneymapConfig);
+            dimension = "";
+        } else if (type == ServerPropType.DEFAULT) {
+            payload = gson.toJson(plugin.getConfig().defaultWorldConfig);
+            dimension = "";
+        } else {
+            payload = gson.toJson(getWorldConfig(dimension).journeymapConfig);
+        }
+
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+        out.writeByte(PACKET_MARKER);
+        out.writeInt(type.getId());
+        NetworkUtils.writeUtf(dimension, out);
+        NetworkUtils.writeUtf(payload, out);
+        player.sendPluginMessage(out.toByteArray(), ADMIN_REQUEST_CHANNEL);
+    }
+
+    public void handleVersion(MinimapPlayer player, byte[] message) {
         Gson gson = new Gson();
         JMVersion serverVersion = new JMVersion();
         ByteArrayDataInput in = ByteStreams.newDataInput(message);
-        if (!modern(player)) in.readByte();
 
         String sent = NetworkUtils.readUtf(in);
         JMVersion clientVersion = gson.fromJson(sent, JMVersion.class);
@@ -158,9 +165,9 @@ public class JMHandler implements MessageHandler {
 
         String payload = gson.toJson(serverVersion);
         ByteArrayDataOutput out = ByteStreams.newDataOutput();
-        if (!modern(player)) out.writeByte(0);
         NetworkUtils.writeUtf(payload, out);
-        player.sendPluginMessage(out.toByteArray(), replyChannel);
+        player.sendPluginMessage(out.toByteArray(), VERSION_CHANNEL);
+        sendPermissions(player);
     }
 
     public JMConfig getEffectiveConfig(MinimapPlayer player) {
@@ -172,70 +179,67 @@ public class JMHandler implements MessageHandler {
         return config;
     }
 
-    public void handlePerm(MinimapPlayer player, byte[] message, String replyChannel, int replyByte) {
-        modernList.putIfAbsent(player.getUniqueId(), message.length > 0 && message[0] == 42);
-        JMConfig config = getEffectiveConfig(player);
+    public void handlePerm(MinimapPlayer player, String replyChannel) {
+        JMConfig config = getEffectiveConfig(player).normalizeForClient();
 
         Gson gson = new Gson();
         String payload = gson.toJson(config);
         ByteArrayDataOutput out = ByteStreams.newDataOutput();
-        if (!modern(player)) out.writeByte(replyByte);
-        out.writeByte(42);
+        out.writeByte(PACKET_MARKER);
         out.writeBoolean(player.hasPermission("minimap.jm.admin"));
         NetworkUtils.writeUtf(payload, out);
         out.writeBoolean(true);
         player.sendPluginMessage(out.toByteArray(), replyChannel);
     }
 
-    private boolean modern(MinimapPlayer player) {
-        Boolean modern = modernList.get(player.getUniqueId());
-        if (modern == null) return false;
-        return modern;
+    private MinimapConfig.WorldConfig getWorldConfig(String dimension) {
+        String worldName = getWorldFromKeyedName(dimension)
+                .map(MinimapWorld::getName)
+                .orElse(dimension);
+        return plugin.getConfig().getWorldConfig(worldName);
+    }
+
+    private boolean canViewServerProperties(MinimapPlayer player) {
+        return player.hasPermission("minimap.jm.admin")
+                || Boolean.parseBoolean(plugin.getConfig().globalJourneymapConfig.viewOnlyServerProperties);
     }
 
     public void playerLeft(MinimapPlayer player) {
-        modernList.remove(player.getUniqueId());
     }
 
     @Override
     public void onPluginMessage(String channel, MinimapPlayer player, byte[] message) {
         switch (channel.split(":")[1]) {
             case "version":
-                handleVersion(player, message, channel);
+                handleVersion(player, message);
                 break;
             case "perm_req":
-                handlePerm(player, message, channel, 0);
+                handlePerm(player, channel);
                 break;
             case "admin_req":
-                handleAdminReq(player, message, channel, 0);
+                handleAdminReq(player, message);
                 break;
             case "admin_save":
-                handleAdminSave(player, message, channel, 0);
+                handleAdminSave(player, message);
                 break;
             case "teleport_req":
-                handleTeleport(player, message, channel, 0);
+                handleTeleport(player, message);
+                break;
+            case "mp_options_req":
+                handleMPOptions(player, message);
                 break;
             case "common":
-                ByteArrayDataInput in = ByteStreams.newDataInput(message);
-                byte type = in.readByte();
-                switch (type) {
-                    case 0:
-                        handleAdminReq(player, message, channel, type);
-                        break;
-                    case 1:
-                        handleAdminSave(player, message, channel, type);
-                        break;
-                    case 2:
-                        handlePerm(player, message, channel, type);
-                        break;
-                    case 4:
-                        handleTeleport(player, message, channel, type);
-                        break;
-                    case 5:
-                        handleMPOptions(player, message, channel, type);
-                        break;
-                }
                 break;
         }
+    }
+
+    private static class MultiplayerOptionsConfig {
+        public String loadedChunksEntity = "false";
+        public String loadedChunksBlock = "false";
+        public String loadedChunksFull = "false";
+        public String loadedChunksInaccessible = "false";
+        public String visible = "true";
+        public String hideSelfUnderground = "false";
+        public String configVersion = new JMVersion().journeymap_version.full;
     }
 }

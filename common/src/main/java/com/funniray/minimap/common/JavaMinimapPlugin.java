@@ -25,7 +25,13 @@ public abstract class JavaMinimapPlugin implements MinimapPlugin {
             "journeymap:admin_save",
             "journeymap:teleport_req",
             "journeymap:common",
+            "journeymap:mp_options_req",
+            "journeymap:chunk_overlay",
+            "journeymap:remove_player",
+            "journeymap:player_loc",
+            "journeymap:waypoint",
             "worldinfo:world_id",
+            "xaerolib:main",
             "xaerominimap:main",
             "xaeroworldmap:main",
             "voxelmap:settings"
@@ -69,14 +75,19 @@ public abstract class JavaMinimapPlugin implements MinimapPlugin {
 
     @Override
     public void handleSwitchWorld(MinimapWorld world, MinimapPlayer player) {
-        xaerosHandler.sendXaerosConfig(player);
+        xaerosHandler.sendXaerosWorldChangePackets(player);
+        jmHandler.sendPermissions(player);
         voxelHandler.sendSettings(player);
     }
 
     @Override
     public void handlePlayerJoined(MinimapPlayer player) {
-        xaerosHandler.sendXaerosHandshake(player);
-        xaerosHandler.sendXaerosConfig(player);
+        jmHandler.sendInitialState(player);
+        handlePlayerJoinedRepeat(player);
+    }
+
+    public void handlePlayerJoinedRepeat(MinimapPlayer player) {
+        xaerosHandler.sendXaerosJoinPackets(player);
         voxelHandler.sendSettings(player);
     }
 
@@ -106,6 +117,7 @@ public abstract class JavaMinimapPlugin implements MinimapPlugin {
                 break;
             case "xaerominimap":
             case "xaeroworldmap":
+            case "xaerolib":
                 xaerosHandler.onPluginMessage(channel, player, message);
                 break;
             case "worldinfo":

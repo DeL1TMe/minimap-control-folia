@@ -9,13 +9,18 @@ repositories {
     }
 }
 
-val javaTarget = 21 // Sponge targets a minimum of Java 17
+val javaTarget = 25
 java {
-    sourceCompatibility = JavaVersion.toVersion(javaTarget)
-    targetCompatibility = JavaVersion.toVersion(javaTarget)
-    /*if (JavaVersion.current() < JavaVersion.toVersion(javaTarget)) {
-        toolchain.languageVersion.set(JavaLanguageVersion.of(javaTarget))
-    }*/
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(javaTarget))
+        vendor.set(JvmVendorSpec.matching(""))
+    }
+}
+
+tasks {
+    withType<JavaCompile>().configureEach {
+        options.release.set(javaTarget)
+    }
 }
 
 dependencies {

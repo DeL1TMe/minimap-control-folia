@@ -1,10 +1,10 @@
 plugins {
     `java-library`
-    id("com.gradleup.shadow") version "9.0.0-beta8"
-    id("net.minecrell.plugin-yml.bukkit") version "0.6.0"
+    id("com.gradleup.shadow") version "9.3.2"
 }
 
 val versionStr = (System.getenv("VERSION")?: "v1.0.0").removePrefix("v")
+val pluginVersion = versionStr
 
 group = "com.funniray.minimap"
 version = versionStr
@@ -24,8 +24,8 @@ repositories {
 
 dependencies {
     // Main Dependencies
-    compileOnly("dev.folia:folia-api:1.21.6-R0.1-SNAPSHOT")
-    compileOnly("com.viaversion:viaversion-api:5.4.1")
+    compileOnly("io.papermc.paper:paper-api:26.1.2.build.19-alpha")
+    compileOnly("com.viaversion:viaversion-api:5.0.1")
     implementation(project(":common"))
 
     // Common Dependencies
@@ -37,16 +37,24 @@ dependencies {
     implementation("net.kyori:adventure-nbt:4.22.0")
 }
 
-val javaTarget = 21
+val javaTarget = 25
 java {
-    sourceCompatibility = JavaVersion.toVersion(javaTarget)
-    targetCompatibility = JavaVersion.toVersion(javaTarget)
-    /*if (JavaVersion.current() < JavaVersion.toVersion(javaTarget)) {
-        toolchain.languageVersion.set(JavaLanguageVersion.of(javaTarget))
-    }*/
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(javaTarget))
+        vendor.set(JvmVendorSpec.matching(""))
+    }
 }
 
 tasks {
+    withType<JavaCompile>().configureEach {
+        options.release.set(javaTarget)
+    }
+    processResources {
+        inputs.property("version", pluginVersion)
+        filesMatching("plugin.yml") {
+            expand("version" to pluginVersion)
+        }
+    }
     build {
         dependsOn(shadowJar)
     }
@@ -57,24 +65,8 @@ tasks {
         exclude("com/google/gson/**")
         exclude("org/apache/commons/**")
         exclude("org/yaml/snakeyaml/**")
-        archiveBaseName.set("${rootProject.name}-spigot")
+        archiveBaseName.set("minimap-control-folia")
         archiveClassifier.set("")
-        doLast {
-            copy {
-                from(archiveFile)
-                into("${rootProject.projectDir}/build")
-            }
-        }
+        destinationDirectory.set(rootProject.layout.buildDirectory.dir("libs"))
     }
-}
-
-bukkit {
-    name = "MinimapControl"
-    main = "com.funniray.minimap.spigot.SpigotMinimap"
-    authors = listOf("funniray")
-    description = "Control minimap settings from server-side software"
-
-    apiVersion = "1.13"
-    softDepend = listOf("viaversion")
-    foliaSupported = true
 }

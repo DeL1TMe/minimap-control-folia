@@ -13,7 +13,7 @@ import com.google.gson.Gson;
 public class VoxelHandler {
     private final JavaMinimapPlugin plugin;
 
-    public String VOXEL_SETTINGS_CHANNEL = "voxelmap:settings";
+    public static final String VOXEL_SETTINGS_CHANNEL = "voxelmap:settings";
 
     public VoxelHandler(JavaMinimapPlugin plugin) {
         this.plugin = plugin;
@@ -29,9 +29,8 @@ public class VoxelHandler {
         String configJson = new Gson().toJson(config.applyOverrides(player));
 
         ByteArrayDataOutput out = ByteStreams.newDataOutput();
-        out.writeByte(42);
+        out.writeByte(0);
         NetworkUtils.writeUtf(configJson, out);
         player.sendPluginMessage(out.toByteArray(), VOXEL_SETTINGS_CHANNEL);
     }
-
 }

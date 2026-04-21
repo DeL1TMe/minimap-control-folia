@@ -1,0 +1,48 @@
+name: MinimapControl
+main: com.funniray.minimap.spigot.SpigotMinimap
+version: "${version}"
+authors:
+  - funniray
+description: Control minimap settings from server-side software
+api-version: "26.1"
+folia-supported: true
+softdepend:
+  - viaversion
+channels:
+  - xaerolib:main
+  - xaerominimap:main
+  - xaeroworldmap:main
+  - journeymap:version
+  - journeymap:perm_req
+  - journeymap:admin_req
+  - journeymap:admin_save
+  - journeymap:teleport_req
+  - journeymap:mp_options_req
+  - journeymap:chunk_overlay
+  - journeymap:remove_player
+  - journeymap:common
+  - journeymap:player_loc
+  - journeymap:waypoint
+  - worldinfo:world_id
+  - voxelmap:settings
+permissions:
+  minimap.override.radar.enabled:
+    default: false
+  minimap.override.radar.disabled:
+    default: false
+  minimap.override.cave-mode.enabled:
+    default: false
+  minimap.override.cave-mode.disabled:
+    default: false
+  minimap.override.nether-cave-mode.enabled:
+    default: false
+  minimap.override.nether-cave-mode.disabled:
+    default: false
+  minimap.override.radar-mobs.enabled:
+    default: false
+  minimap.override.radar-mobs.disabled:
+    default: false
+  minimap.override.radar-players.enabled:
+    default: false
+  minimap.override.radar-players.disabled:
+    default: false

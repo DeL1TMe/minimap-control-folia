@@ -94,6 +94,7 @@ public abstract class JavaMinimapPlugin implements MinimapPlugin {
     @Override
     public void handlePlayerLeft(MinimapPlayer player) {
         jmHandler.playerLeft(player);
+        xaerosHandler.playerLeft(player);
     }
 
     public void saveConfig() {

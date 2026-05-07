@@ -17,6 +17,10 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class XaerosHandler implements MessageHandler {
     private final JavaMinimapPlugin plugin;
@@ -25,6 +29,9 @@ public class XaerosHandler implements MessageHandler {
     public static final String XAEROS_MAP_CHANNEL = "xaeroworldmap:main";
     public static final String XAEROLIB_CHANNEL = "xaerolib:main";
     private static final int XAEROS_NETWORK_VERSION = 3;
+    private static final Set<String> XAERO_CONFIG_CHANNELS = Set.of(XAEROS_CHANNEL, XAEROS_MAP_CHANNEL);
+
+    private final Map<UUID, Set<String>> detectedConfigChannels = new ConcurrentHashMap<>();
 
     public XaerosHandler(JavaMinimapPlugin plugin) {
         this.plugin = plugin;
@@ -33,14 +40,14 @@ public class XaerosHandler implements MessageHandler {
     public void sendXaerosJoinPackets(MinimapPlayer player) {
         List<MinimapPlayer.PluginMessage> messages = new ArrayList<>();
         addXaerosHandshakeMessages(messages);
-        addXaerosConfigMessages(messages, getEffectiveConfig(player));
+        addXaerosConfigMessages(messages, getEffectiveConfig(player), getDetectedConfigChannels(player));
         player.sendPluginMessages(messages);
     }
 
     public void sendXaerosWorldChangePackets(MinimapPlayer player) {
         List<MinimapPlayer.PluginMessage> messages = new ArrayList<>();
         messages.add(pluginMessage(XAEROLIB_CHANNEL, oneByteXaeroLibPacket(1)));
-        addXaerosConfigMessages(messages, getEffectiveConfig(player));
+        addXaerosConfigMessages(messages, getEffectiveConfig(player), getDetectedConfigChannels(player));
         player.sendPluginMessages(messages);
     }
 
@@ -67,8 +74,12 @@ public class XaerosHandler implements MessageHandler {
 
     public void sendXaerosConfig(MinimapPlayer player) {
         List<MinimapPlayer.PluginMessage> messages = new ArrayList<>();
-        addXaerosConfigMessages(messages, getEffectiveConfig(player));
+        addXaerosConfigMessages(messages, getEffectiveConfig(player), getDetectedConfigChannels(player));
         player.sendPluginMessages(messages);
+    }
+
+    public void playerLeft(MinimapPlayer player) {
+        detectedConfigChannels.remove(player.getUniqueId());
     }
 
     private XaerosConfig getEffectiveConfig(MinimapPlayer player) {
@@ -81,9 +92,9 @@ public class XaerosHandler implements MessageHandler {
         return config.applyOverrides(player);
     }
 
-    private void addXaerosConfigMessages(List<MinimapPlayer.PluginMessage> messages, XaerosConfig config) {
+    private void addXaerosConfigMessages(List<MinimapPlayer.PluginMessage> messages, XaerosConfig config, Set<String> configChannels) {
         addLegacyRulesConfig(messages, config);
-        addXaeroLibConfig(messages, config);
+        addXaeroLibConfig(messages, config, configChannels);
     }
 
     private void addLegacyRulesConfig(List<MinimapPlayer.PluginMessage> messages, XaerosConfig config) {
@@ -122,11 +133,29 @@ public class XaerosHandler implements MessageHandler {
         return out.toByteArray();
     }
 
-    private void addXaeroLibConfig(List<MinimapPlayer.PluginMessage> messages, XaerosConfig config) {
-        messages.add(pluginMessage(XAEROLIB_CHANNEL, configChannelPacket(XAEROS_CHANNEL)));
-        messages.add(pluginMessage(XAEROLIB_CHANNEL, enforcedConfigPacket(minimapOptions(config))));
-        messages.add(pluginMessage(XAEROLIB_CHANNEL, configChannelPacket(XAEROS_MAP_CHANNEL)));
-        messages.add(pluginMessage(XAEROLIB_CHANNEL, enforcedConfigPacket(worldMapOptions(config))));
+    private void addXaeroLibConfig(List<MinimapPlayer.PluginMessage> messages, XaerosConfig config, Set<String> configChannels) {
+        if (configChannels.contains(XAEROS_CHANNEL)) {
+            messages.add(pluginMessage(XAEROLIB_CHANNEL, configChannelPacket(XAEROS_CHANNEL)));
+            messages.add(pluginMessage(XAEROLIB_CHANNEL, enforcedConfigPacket(minimapOptions(config))));
+        }
+        if (configChannels.contains(XAEROS_MAP_CHANNEL)) {
+            messages.add(pluginMessage(XAEROLIB_CHANNEL, configChannelPacket(XAEROS_MAP_CHANNEL)));
+            messages.add(pluginMessage(XAEROLIB_CHANNEL, enforcedConfigPacket(worldMapOptions(config))));
+        }
+    }
+
+    private Set<String> getDetectedConfigChannels(MinimapPlayer player) {
+        return detectedConfigChannels.getOrDefault(player.getUniqueId(), Set.of());
+    }
+
+    private Set<String> markConfigChannelDetected(MinimapPlayer player, String channel) {
+        if (!XAERO_CONFIG_CHANNELS.contains(channel)) {
+            return Set.of();
+        }
+
+        Set<String> channels = detectedConfigChannels.computeIfAbsent(player.getUniqueId(), uuid -> ConcurrentHashMap.newKeySet());
+        channels.add(channel);
+        return Set.of(channel);
     }
 
     private MinimapPlayer.PluginMessage pluginMessage(String channel, byte[] payload) {
@@ -209,7 +238,10 @@ public class XaerosHandler implements MessageHandler {
                 return;
             }
 
-            sendXaerosConfig(player);
+            Set<String> configChannels = markConfigChannelDetected(player, channel);
+            List<MinimapPlayer.PluginMessage> messages = new ArrayList<>();
+            addXaerosConfigMessages(messages, getEffectiveConfig(player), configChannels);
+            player.sendPluginMessages(messages);
         }
     }
 }

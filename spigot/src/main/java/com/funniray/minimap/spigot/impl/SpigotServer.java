@@ -18,12 +18,13 @@ public class SpigotServer implements MinimapServer {
     @Override
     public Version getMinecraftVersion() {
         String[] ver = Bukkit.getBukkitVersion().split("-")[0].split("\\.");
-        if (ver.length < 3) {
-            return new Version(parseInt(ver[0]), parseInt(ver[1]), 0);
-        } else if (ver.length == 3) {
-            return new Version(parseInt(ver[0]), parseInt(ver[1]), parseInt(ver[2]));
-        } else {
-            throw new RuntimeException("Cannot parse version "+Bukkit.getBukkitVersion());
+        try {
+            int major = parseInt(ver[0]);
+            int minor = ver.length > 1 ? parseInt(ver[1]) : 0;
+            int patch = ver.length > 2 ? parseInt(ver[2]) : 0;
+            return new Version(major, minor, patch);
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Cannot parse version " + Bukkit.getBukkitVersion());
         }
     }
 
